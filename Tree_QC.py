@@ -37,48 +37,75 @@ def fastaparse(fasta):
 
 def removal_team(sequences, i):
     #Remove a position from MSA given sequences and position index
-    for sequence in sequences:
-        sequence = sequence[:(i-1)] + sequence[(i+1):]
-    return sequences
+    new_sequences = []
+    if(i == 0):
+        for sequence in sequences:
+            new_sequences.append(sequence[1:])
+    if(i == len(sequences[0])-1):
+        for sequence in sequences:
+            new_sequences.append(sequence[:(i)])
+    else:
+        for sequence in sequences:
+            new_sequences.append(sequence[:(i)] + sequence[(i+1):])
+    return new_sequences
 
+def allgap_detector(sequences, i):
+    for sequence in sequences:
+        if(sequence[i] != "-"):
+            return False
+    return True
+
+def detector_elim(sequences, detector):
+    for i in range(len(sequences[0])-1, 0, -1):
+        if(detector[i] == 1):
+            sequences = removal_team(sequences, i)
+    return sequences
 
 def initial_cleanup(sequences):
     #Remove all positions in MSA comprised of only gap characters
+    detector = np.zeros(len(sequences[0]))
     for i in range(len(sequences[0])):
-        detector = False
-        for sequence in sequences:
-            if(sequence[i]!="-"):
-                detector = True
-                break
-        if(detector==False):
-            sequences = removal_team(sequences, i)
+        if(allgap_detector(sequences, i) == True):
+            detector[i] = 1
+        elif(allgap_detector(sequences, i) == False):
+            pass
+    sequences = detector_elim(sequences, detector)
+    print("Initial cleanup complete")
     return sequences
+
+def gap_detector(sequences, i):
+    for sequence in sequences:
+        if(sequence[i] == "-"):
+            return False
+    return True
+
+def threshold_detector(sequences, i, threshold):
+    count = 0
+    for sequence in sequences:
+        if(sequence[i] == "-"):
+            count += 1
+    if(count >= threshold):
+        return False
+    else:
+        return True
 
 def take_out_trash(sequences, exclude):
     #Remove positions in MSA based upon number of gap characters included; wobble bases are OK
     if(exclude == 0):
         #For if you don't want any gap characters because they clash with your personal aesthetic
+        detector = np.zeros(len(sequences[0]))
         for i in range(len(sequences[0])):
-            detector = False
-            for sequence in sequences:
-                if(sequence[i]=="-"):
-                    detector = True
-                    break
-            if(detector == True):
-                sequences = removal_team(sequences, i)
+            if(gap_detector(sequences, i) == False):
+                detector[i] = 1
     else:
         #If you want to keep some more biologically relevant data in your alignment even though it'll make your bootstrap values go down
+        detector = np.zeros(len(sequences[0]))
         for i in range(len(sequences[0])):
-            detector = 0
-            trigger = False
-            for sequence in sequences:
-                if(sequence[i]=="-"):
-                    detector += 1
-                if(detector == exclude):
-                    trigger = True
-                    break
-            if(trigger == True):
-                sequences = removal_team(sequences, i)
+            if(threshold_detector(sequences, i, exclude) == False):
+                detector[i] = 1
+    sequences = detector_elim(sequences, detector)
+
+    return sequences
 
 def writer(names, seq_store):
     proper_seqs = []
@@ -86,9 +113,11 @@ def writer(names, seq_store):
         proper_seqs.append(SeqRecord(seq_store[i], id = names[i], description=""))
 
     SeqIO.write(proper_seqs, outfile, "fasta")
+    print("Data successfully written")
 
 def main():
     sequences, names = fastaparse(fastapath) #Get that fasta file!
+
     if(already_cleaned == None):
         #Well you'll have to clean it up in that case, won't you?
         cleaned_sequences = initial_cleanup(sequences)
